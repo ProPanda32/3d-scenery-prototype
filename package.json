@@ -1,0 +1,19 @@
+{
+  "name": "chinese-scenery-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "prepare:scene": "splat-transform \"Chinise City 2nd Project/3D Chinise Scenery .spz\" public/scenery.sog"
+  },
+  "dependencies": {
+    "playcanvas": "^2.23.0"
+  },
+  "devDependencies": {
+    "@playcanvas/splat-transform": "^3.9.0",
+    "vite": "^7.1.0"
+  }
+}
