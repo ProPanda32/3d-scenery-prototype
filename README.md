@@ -1,6 +1,6 @@
 # 3D scenery prototype
 
-Full-screen Gaussian splat viewer for the Chinese scenery capture. The Phoenix GLB is reserved for a later step.
+Full-screen flight through the Chinese scenery capture, with the Phoenix as the player character.
 
 ## Run locally
 
@@ -10,4 +10,4 @@ Full-screen Gaussian splat viewer for the Chinese scenery capture. The Phoenix G
 
 Open the local URL printed by Vite. The generated `public/scenery.sog` is ignored by Git; the original SPZ and GLB are not modified. Run `prepare:scene` again if the source scenery changes.
 
-Drag to look around, use the wheel or pinch to zoom, right-drag or Shift-drag to pan, and use WASD plus Q/E to move through the scene. Hold Shift while using WASD to move faster.
+W / Up Arrow accelerates, S / Down Arrow slows and can reverse, and A/D or Left/Right steers within a gently guided closed flight loop. The Phoenix asset has no animation clips, skin, bones, or separate wing objects, so it remains a static model while flying.
