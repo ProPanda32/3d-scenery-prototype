@@ -56,6 +56,18 @@ async function start() {
   let transition = 'journey';
   let transitionTime = 0;
   let previousFrame = performance.now();
+  const pointerTarget = { x: 0, y: 0 };
+  const pointerCurrent = { x: 0, y: 0 };
+
+  canvas.addEventListener('pointermove', event => {
+    const rect = canvas.getBoundingClientRect();
+    pointerTarget.x = pc.math.clamp((event.clientX - rect.left) / rect.width * 2 - 1, -1, 1);
+    pointerTarget.y = pc.math.clamp((event.clientY - rect.top) / rect.height * 2 - 1, -1, 1);
+  });
+  canvas.addEventListener('pointerleave', () => {
+    pointerTarget.x = 0;
+    pointerTarget.y = 0;
+  });
 
   // The river runs toward negative local X. These endpoints were checked in
   // the rendered capture; the camera stays over its open center corridor.
@@ -68,13 +80,12 @@ async function start() {
         : journeySeconds - 2 - (journeySeconds - seconds) ** 2 / 4;
     const x = -12 * distance / (journeySeconds - 2);
     localPosition.set(x, 0, 0);
-    localLookAhead.set(x - 12, 0, 4);
+    // Hover changes where the camera looks, without moving it off the river.
+    localLookAhead.set(x - 12, pointerCurrent.y * 2.5, 4 + pointerCurrent.x * 6);
     transform.transformPoint(localPosition, worldPosition);
     transform.transformPoint(localLookAhead, worldLookAhead);
     camera.setPosition(worldPosition);
     camera.lookAt(worldLookAhead);
-    const angles = camera.getEulerAngles();
-    camera.setEulerAngles(angles.x, angles.y, 180);
   }
 
   placeCamera(0);
@@ -82,6 +93,9 @@ async function start() {
     const now = performance.now();
     const dt = (now - previousFrame) / 1000;
     previousFrame = now;
+    const pointerBlend = 1 - Math.exp(-dt * 4);
+    pointerCurrent.x += (pointerTarget.x - pointerCurrent.x) * pointerBlend;
+    pointerCurrent.y += (pointerTarget.y - pointerCurrent.y) * pointerBlend;
     if (transition === 'journey') {
       elapsed = Math.min(elapsed + dt, journeySeconds);
       placeCamera(elapsed);
