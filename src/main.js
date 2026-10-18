@@ -61,91 +61,89 @@ async function start() {
   const phoenix = new pc.Entity('Phoenix flight rig');
   const phoenixModel = phoenixAsset.resource.instantiateRenderEntity({ castShadows: false });
   phoenixModel.setLocalScale(2.4, 2.4, 2.4);
-  const phoenixLayer = new pc.Layer({ name: 'Phoenix player' });
-  app.scene.layers.push(phoenixLayer);
-  camera.camera.layers = [...camera.camera.layers, phoenixLayer.id];
-  phoenixModel.findComponents('render').forEach(render => {
-    render.layers = [phoenixLayer.id];
-    render.meshInstances.forEach(meshInstance => {
-      meshInstance.material = meshInstance.material.clone();
-      meshInstance.material.depthTest = false;
-      meshInstance.material.depthWrite = false;
-      meshInstance.material.update();
-    });
-  });
   phoenix.addChild(phoenixModel);
   app.root.addChild(phoenix);
 
-  const toWorld = local => SCENE_TURN.transformVector(local);
-  const route = {
-    radiusX: 4,
-    radiusZ: 2.5,
-    centerZ: 9,
-    height: -8.3
+  // Fly a straight river corridor through the captured volume. At the far end,
+  // move the single splat back under the Phoenix so the scenery itself loops.
+  const bounds = sceneryAsset.resource.aabb;
+  const startZ = bounds.center.z - 2;
+  const endZ = bounds.center.z + bounds.halfExtents.z - 4;
+  const loopLength = endZ - startZ;
+  const corridor = {
+    x: bounds.center.x,
+    y: bounds.center.y,
+    startZ,
+    endZ,
+    length: loopLength
   };
-  const routePoint = phase => toWorld(new pc.Vec3(
-    -route.radiusX * (1 - Math.cos(phase)),
-    route.height + 0.18 * Math.sin(phase * 2),
-    route.centerZ - route.radiusZ * Math.sin(phase)
-  ));
-  const routeTangent = phase => routePoint(phase + 0.001).sub(routePoint(phase - 0.001)).normalize();
-
-  let phase = 0;
-  let speed = 1.35;
+  const sceneryOffset = new pc.Vec3();
+  let distanceTravelled = 0;
+  let lap = 0;
+  let speed = 2.1;
   let lateralOffset = 0;
   let lateralVelocity = 0;
+  let heading = SCENE_TURN.transformVector(new pc.Vec3(0, 0, 1)).normalize();
   const keys = new Set();
   const keyCodes = new Set(['KeyW', 'ArrowUp', 'KeyS', 'ArrowDown', 'KeyA', 'ArrowLeft', 'KeyD', 'ArrowRight']);
+  canvas.tabIndex = 0;
+  canvas.addEventListener('pointerdown', () => canvas.focus());
   window.addEventListener('keydown', event => {
     if (keyCodes.has(event.code)) event.preventDefault();
-    if (!event.repeat) keys.add(event.code);
+    keys.add(event.code);
   });
   window.addEventListener('keyup', event => keys.delete(event.code));
   window.addEventListener('blur', () => keys.clear());
 
-  const playerPosition = routePoint(phase);
-  const forward = routeTangent(phase);
-  const cameraPosition = playerPosition.clone().sub(forward.clone().mulScalar(4.5));
-  const cameraTarget = playerPosition.clone().add(forward.clone().mulScalar(5.5)).sub(pc.Vec3.UP.clone().mulScalar(1.5));
+  const localPlayerPosition = new pc.Vec3(corridor.x, corridor.y, corridor.startZ);
+  const playerPosition = scenery.getWorldTransform().transformPoint(localPlayerPosition);
+  const cameraPosition = playerPosition.clone().sub(heading.clone().mulScalar(4.5)).add(pc.Vec3.UP.clone().mulScalar(1.1));
+  const cameraTarget = playerPosition.clone().add(heading.clone().mulScalar(3.5)).sub(pc.Vec3.UP.clone().mulScalar(0.4));
   phoenix.setPosition(playerPosition);
-  phoenix.setEulerAngles(0, 0, 0);
+  phoenix.setEulerAngles(0, Math.atan2(heading.x, heading.z) * pc.math.RAD_TO_DEG, 0);
   camera.setPosition(cameraPosition);
   camera.lookAt(cameraTarget);
 
   app.on('update', rawDt => {
-    const dt = Math.min(rawDt, 0.05);
+    const dt = rawDt;
     const forwardInput = Number(keys.has('KeyW') || keys.has('ArrowUp'));
     const reverseInput = Number(keys.has('KeyS') || keys.has('ArrowDown'));
     const steerInput = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
 
-    // The route keeps moving at cruise speed; throttle and steering ease in/out.
-    const targetSpeed = pc.math.clamp(1.35 + forwardInput * 2.8 - reverseInput * 2.7, -1.35, 4.4);
-    speed += (targetSpeed - speed) * (1 - Math.exp(-1.8 * dt));
-    phase += speed * dt / 6.2;
+    const targetSpeed = pc.math.clamp(2.1 + forwardInput * 3.4 - reverseInput * 2.1, 0, 6.2);
+    speed += (targetSpeed - speed) * (1 - Math.exp(-3.2 * dt));
+    distanceTravelled += speed * dt;
 
-    const spring = 8;
-    const damping = 5.5;
-    lateralVelocity += (steerInput * 2.6 - lateralOffset) * spring * dt - lateralVelocity * damping * dt;
-    lateralOffset = pc.math.clamp(lateralOffset + lateralVelocity * dt, -3, 3);
+    const desiredLateralVelocity = steerInput * 4.2 - lateralOffset * 0.7;
+    lateralVelocity += (desiredLateralVelocity - lateralVelocity) * (1 - Math.exp(-4.5 * dt));
+    lateralOffset = pc.math.clamp(lateralOffset + lateralVelocity * dt, -6, 6);
+    if (Math.abs(lateralOffset) >= 6) lateralVelocity = 0;
 
-    const centerline = routePoint(phase);
-    const routeForward = routeTangent(phase);
-    const routeRight = new pc.Vec3(routeForward.z, 0, -routeForward.x).normalize();
-    const travelForward = routeForward.clone().mulScalar(Math.sign(speed || 1));
-    const playerTarget = centerline.add(routeRight.mulScalar(lateralOffset));
-    const blend = 1 - Math.exp(-5 * dt);
-    playerPosition.lerp(playerPosition, playerTarget, blend);
-    forward.lerp(forward, travelForward, 1 - Math.exp(-4 * dt)).normalize();
+    const nextLap = Math.floor(distanceTravelled / loopLength);
+    if (nextLap !== lap) {
+      sceneryOffset.copy(SCENE_TURN.transformVector(new pc.Vec3(0, 0, nextLap * loopLength)));
+      scenery.setPosition(sceneryOffset);
+      lap = nextLap;
+    }
+    const localZ = corridor.startZ + (distanceTravelled % loopLength);
+    localPlayerPosition.set(corridor.x + lateralOffset, corridor.y, localZ);
+    const worldTransform = scenery.getWorldTransform();
+    worldTransform.transformPoint(localPlayerPosition, playerPosition);
 
+    const localFlightDirection = new pc.Vec3(lateralVelocity * Number(speed > 0.01), 0, Math.max(speed, 0.01)).normalize();
+    const desiredHeading = SCENE_TURN.transformVector(localFlightDirection).normalize();
+    heading.lerp(heading, desiredHeading, 1 - Math.exp(-2.8 * dt)).normalize();
+    const yaw = Math.atan2(heading.x, heading.z) * pc.math.RAD_TO_DEG;
     phoenix.setPosition(playerPosition);
-    const yaw = Math.atan2(forward.x, forward.z) * pc.math.RAD_TO_DEG;
-    phoenix.setEulerAngles(0, yaw, -steerInput * 7);
+    phoenix.setEulerAngles(0, yaw, -steerInput * 8);
 
     const cameraDesired = playerPosition.clone()
-      .sub(forward.clone().mulScalar(4.5));
+      .sub(heading.clone().mulScalar(4.5))
+      .add(pc.Vec3.UP.clone().mulScalar(1.1));
+    const lookAhead = Math.min(3.5, Math.max(0.75, corridor.endZ - localZ - 0.5));
     const lookDesired = playerPosition.clone()
-      .add(forward.clone().mulScalar(5.5))
-      .sub(pc.Vec3.UP.clone().mulScalar(1.5));
+      .add(heading.clone().mulScalar(lookAhead))
+      .sub(pc.Vec3.UP.clone().mulScalar(0.4));
     cameraPosition.lerp(cameraPosition, cameraDesired, 1 - Math.exp(-3.2 * dt));
     cameraTarget.lerp(cameraTarget, lookDesired, 1 - Math.exp(-4.2 * dt));
     camera.setPosition(cameraPosition);

@@ -10,4 +10,4 @@ Full-screen flight through the Chinese scenery capture, with the Phoenix as the 
 
 Open the local URL printed by Vite. The generated `public/scenery.sog` is ignored by Git; the original SPZ and GLB are not modified. Run `prepare:scene` again if the source scenery changes.
 
-W / Up Arrow accelerates, S / Down Arrow slows and can reverse, and A/D or Left/Right steers within a gently guided closed flight loop. The Phoenix asset has no animation clips, skin, bones, or separate wing objects, so it remains a static model while flying.
+W / Up Arrow accelerates, S / Down Arrow slows, and A/D or Left/Right steers through a straight flight corridor. The single scenery capture shifts back under the Phoenix at the end of the corridor so the flight can continue without duplicating the splat. Click the scene once to focus keyboard controls. The Phoenix remains static; its GLB has no animation clips or usable wing rig.
