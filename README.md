@@ -10,4 +10,4 @@ Full-screen guided journey through the Chinese scenery capture.
 
 Open the local URL printed by Vite. The generated `public/scenery.sog` is ignored by Git; the original SPZ and GLB are not modified. Run `prepare:scene` again if the source scenery changes.
 
-The camera begins above the river, travels toward the distant mountains, then fades briefly to restart the route. Move the mouse over the scene to look around while the journey continues. The original Phoenix model remains an untouched project asset and is not loaded into the viewer.
+The camera begins above the river, travels toward the distant mountains, then fades briefly to restart the route. Move the mouse over the scene to look around while the journey continues. The Phoenix appears as a distant figure in the sky and gently turns and drifts with the pointer. The original SPZ and GLB assets are not modified.

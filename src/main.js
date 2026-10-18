@@ -5,6 +5,7 @@ const canvas = document.querySelector('#scene');
 const loading = document.querySelector('#loading');
 const loadingText = document.querySelector('#loading-text');
 const SCENE_TURN = new pc.Quat().setFromEulerAngles(0, 0, 180);
+const phoenixUrl = new URL('../Chinise City 2nd Project/3D Model Phoenix GLB.glb', import.meta.url).href;
 
 function showError(error) {
   console.error(error);
@@ -38,13 +39,36 @@ async function start() {
   });
   app.root.addChild(camera);
 
+  const phoenixLight = new pc.Entity('Phoenix daylight');
+  phoenixLight.addComponent('light', {
+    type: 'directional',
+    color: new pc.Color(1, 0.94, 0.84),
+    intensity: 1.7,
+    castShadows: false
+  });
+  phoenixLight.setEulerAngles(35, 25, 0);
+  app.root.addChild(phoenixLight);
+
   const sceneryAsset = new pc.Asset('Chinese scenery', 'gsplat', { url: '/scenery.sog' });
-  await loadAsset(app, sceneryAsset);
+  const phoenixAsset = new pc.Asset('Phoenix', 'container', { url: phoenixUrl });
+  await Promise.all([loadAsset(app, sceneryAsset), loadAsset(app, phoenixAsset)]);
 
   const scenery = new pc.Entity('Chinese scenery');
   scenery.addComponent('gsplat', { asset: sceneryAsset });
   scenery.setRotation(SCENE_TURN);
   app.root.addChild(scenery);
+
+  const phoenix = new pc.Entity('Sky Phoenix');
+  const phoenixModel = phoenixAsset.resource.instantiateRenderEntity({ castShadows: false });
+  phoenixModel.setLocalScale(2.4, 2.4, 2.4);
+  const phoenixLayer = new pc.Layer({ name: 'Sky Phoenix' });
+  app.scene.layers.push(phoenixLayer);
+  camera.camera.layers = [...camera.camera.layers, phoenixLayer.id];
+  phoenixModel.findComponents('render').forEach(render => {
+    render.layers = [phoenixLayer.id];
+  });
+  phoenix.addChild(phoenixModel);
+  app.root.addChild(phoenix);
 
   const transform = scenery.getWorldTransform();
   const localPosition = new pc.Vec3();
@@ -88,7 +112,18 @@ async function start() {
     camera.lookAt(worldLookAhead);
   }
 
+  function placePhoenix() {
+    const position = camera.getPosition().clone()
+      .add(camera.forward.clone().mulScalar(18))
+      .add(camera.up.clone().mulScalar(7 - pointerCurrent.y))
+      .add(camera.right.clone().mulScalar(-pointerCurrent.x * 5));
+    phoenix.setPosition(position);
+    phoenix.lookAt(camera.getPosition());
+    phoenix.rotateLocal(0, pointerCurrent.x * 12, -pointerCurrent.x * 16);
+  }
+
   placeCamera(0);
+  placePhoenix();
   app.on('update', () => {
     const now = performance.now();
     const dt = (now - previousFrame) / 1000;
@@ -118,6 +153,7 @@ async function start() {
         loading.classList.remove('journey-reset');
       }
     }
+    placePhoenix();
   });
 
   requestAnimationFrame(() => loading.classList.add('ready'));
