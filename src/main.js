@@ -4,7 +4,7 @@ import './style.css';
 const canvas = document.querySelector('#scene');
 const loading = document.querySelector('#loading');
 const loadingText = document.querySelector('#loading-text');
-const SCENE_TURN = new pc.Quat().setFromEulerAngles(0, 180, 0);
+const SCENE_TURN = new pc.Quat().setFromEulerAngles(0, 0, 180);
 
 function showError(error) {
   console.error(error);
@@ -46,71 +46,64 @@ async function start() {
   scenery.setRotation(SCENE_TURN);
   app.root.addChild(scenery);
 
-  const bounds = sceneryAsset.resource.aabb;
-  const localTarget = bounds.center.clone();
-  // Start well inside the splat's measured bounds, looking horizontally through
-  // its center toward the valley. Keep this deliberately independent of input.
-  const localCamera = localTarget.clone().add(new pc.Vec3(0, 0, -8));
-  const localAim = localTarget.clone().add(new pc.Vec3(0, -4, 0));
   const transform = scenery.getWorldTransform();
-  const pivot = transform.transformPoint(localAim);
-  const initialPosition = transform.transformPoint(localCamera);
-  camera.setPosition(initialPosition);
-  camera.lookAt(pivot);
-  const initialAngles = camera.getEulerAngles();
-  camera.setEulerAngles(initialAngles.x, initialAngles.y, 180);
-  const state = { pivot: pivot.clone(), yaw: initialAngles.y, pitch: initialAngles.x, distance: initialPosition.distance(pivot) };
-  const current = { pivot: pivot.clone(), yaw: state.yaw, pitch: state.pitch, distance: state.distance };
-  const pointers = new Map();
-  let lastPinch = 0;
-  canvas.tabIndex = 0;
-  canvas.addEventListener('contextmenu', event => event.preventDefault());
-  canvas.addEventListener('pointerdown', event => {
-    canvas.focus();
-    canvas.setPointerCapture(event.pointerId);
-    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, button: event.button });
-    lastPinch = 0;
-  });
-  canvas.addEventListener('pointermove', event => {
-    const pointer = pointers.get(event.pointerId);
-    if (!pointer) return;
-    const dx = event.clientX - pointer.x;
-    const dy = event.clientY - pointer.y;
-    pointer.x = event.clientX;
-    pointer.y = event.clientY;
-    if (pointers.size === 2) {
-      const [a, b] = [...pointers.values()];
-      const pinch = Math.hypot(a.x - b.x, a.y - b.y);
-      if (lastPinch) state.distance *= Math.exp((lastPinch - pinch) * 0.004);
-      lastPinch = pinch;
-    } else if (pointer.button === 2 || event.shiftKey) {
-      const scale = state.distance * 0.0015;
-      state.pivot.add(camera.right.clone().mulScalar(-dx * scale));
-      state.pivot.add(camera.up.clone().mulScalar(dy * scale));
-    } else {
-      state.yaw -= dx * 0.18;
-      state.pitch = pc.math.clamp(state.pitch - dy * 0.18, -89, 89);
-    }
-  });
-  const releasePointer = event => {
-    pointers.delete(event.pointerId);
-    lastPinch = 0;
-  };
-  canvas.addEventListener('pointerup', releasePointer);
-  canvas.addEventListener('pointercancel', releasePointer);
-  canvas.addEventListener('wheel', event => {
-    event.preventDefault();
-    state.distance = Math.max(0.1, state.distance * Math.exp(event.deltaY * 0.001));
-  }, { passive: false });
+  const localPosition = new pc.Vec3();
+  const localLookAhead = new pc.Vec3();
+  const worldPosition = new pc.Vec3();
+  const worldLookAhead = new pc.Vec3();
+  const journeySeconds = 24;
+  let elapsed = 0;
+  let transition = 'journey';
+  let transitionTime = 0;
+  let previousFrame = performance.now();
 
-  app.on('update', dt => {
-    const blend = 1 - Math.exp(-dt * 10);
-    current.pivot.lerp(current.pivot, state.pivot, blend);
-    current.yaw += (state.yaw - current.yaw) * blend;
-    current.pitch += (state.pitch - current.pitch) * blend;
-    current.distance += (state.distance - current.distance) * blend;
-    camera.setEulerAngles(current.pitch, current.yaw, 180);
-    camera.setPosition(current.pivot.clone().sub(camera.forward.clone().mulScalar(current.distance)));
+  // The river runs toward negative local X. These endpoints were checked in
+  // the rendered capture; the camera stays over its open center corridor.
+  function placeCamera(seconds) {
+    // Two second acceleration and deceleration, with a steady pace between.
+    const distance = seconds < 2
+      ? seconds * seconds / 4
+      : seconds <= journeySeconds - 2
+        ? seconds - 1
+        : journeySeconds - 2 - (journeySeconds - seconds) ** 2 / 4;
+    const x = -12 * distance / (journeySeconds - 2);
+    localPosition.set(x, 0, 0);
+    localLookAhead.set(x - 12, 0, 4);
+    transform.transformPoint(localPosition, worldPosition);
+    transform.transformPoint(localLookAhead, worldLookAhead);
+    camera.setPosition(worldPosition);
+    camera.lookAt(worldLookAhead);
+    const angles = camera.getEulerAngles();
+    camera.setEulerAngles(angles.x, angles.y, 180);
+  }
+
+  placeCamera(0);
+  app.on('update', () => {
+    const now = performance.now();
+    const dt = (now - previousFrame) / 1000;
+    previousFrame = now;
+    if (transition === 'journey') {
+      elapsed = Math.min(elapsed + dt, journeySeconds);
+      placeCamera(elapsed);
+      if (elapsed === journeySeconds) {
+        transition = 'fadeOut';
+        transitionTime = 0;
+        loading.classList.add('journey-reset');
+        loading.classList.remove('ready');
+      }
+    } else {
+      transitionTime += dt;
+      if (transitionTime >= 0.75 && transition === 'fadeOut') {
+        elapsed = 0;
+        placeCamera(0);
+        transition = 'fadeIn';
+        transitionTime = 0;
+        loading.classList.add('ready');
+      } else if (transitionTime >= 0.75 && transition === 'fadeIn') {
+        transition = 'journey';
+        loading.classList.remove('journey-reset');
+      }
+    }
   });
 
   requestAnimationFrame(() => loading.classList.add('ready'));

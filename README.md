@@ -1,6 +1,6 @@
 # 3D scenery prototype
 
-Full-screen interactive viewer for the Chinese scenery capture.
+Full-screen guided journey through the Chinese scenery capture.
 
 ## Run locally
 
@@ -10,4 +10,4 @@ Full-screen interactive viewer for the Chinese scenery capture.
 
 Open the local URL printed by Vite. The generated `public/scenery.sog` is ignored by Git; the original SPZ and GLB are not modified. Run `prepare:scene` again if the source scenery changes.
 
-Drag to look around, use the mouse wheel to zoom, and right-drag (or Shift-drag) to pan. The viewer opens from a fixed position inside the scenery, looking across the valley. The original Phoenix model remains an untouched project asset and is not loaded into the viewer.
+The camera begins above the river, travels toward the distant mountains, then fades briefly to restart the route. The original Phoenix model remains an untouched project asset and is not loaded into the viewer.
