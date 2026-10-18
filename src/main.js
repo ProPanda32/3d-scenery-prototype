@@ -4,13 +4,12 @@ import './style.css';
 const canvas = document.querySelector('#scene');
 const loading = document.querySelector('#loading');
 const loadingText = document.querySelector('#loading-text');
-const SCENE_TURN = new pc.Quat().setFromEulerAngles(0, 0, 180);
-const phoenixUrl = new URL('../Chinise City 2nd Project/3D Model Phoenix GLB.glb', import.meta.url).href;
+const SCENE_TURN = new pc.Quat().setFromEulerAngles(0, 180, 0);
 
 function showError(error) {
   console.error(error);
   loading.classList.add('error');
-  loadingText.textContent = `Unable to load the flight scene. ${String(error)}`;
+  loadingText.textContent = `Unable to load the scenery. ${String(error)}`;
 }
 
 const loadAsset = (app, asset) => new Promise((resolve, reject) => {
@@ -30,7 +29,7 @@ async function start() {
   app.scene.ambientLight = new pc.Color(0.55, 0.58, 0.62);
   app.start();
 
-  const camera = new pc.Entity('Follow camera');
+  const camera = new pc.Entity('Scenery camera');
   camera.addComponent('camera', {
     clearColor: new pc.Color(0, 0, 0),
     fov: 68,
@@ -39,115 +38,79 @@ async function start() {
   });
   app.root.addChild(camera);
 
-  const phoenixLight = new pc.Entity('Soft daylight');
-  phoenixLight.addComponent('light', {
-    type: 'directional',
-    color: new pc.Color(1, 0.92, 0.78),
-    intensity: 1.4,
-    castShadows: false
-  });
-  phoenixLight.setEulerAngles(38, 25, 0);
-  app.root.addChild(phoenixLight);
-
   const sceneryAsset = new pc.Asset('Chinese scenery', 'gsplat', { url: '/scenery.sog' });
-  const phoenixAsset = new pc.Asset('Phoenix', 'container', { url: phoenixUrl });
-  await Promise.all([loadAsset(app, sceneryAsset), loadAsset(app, phoenixAsset)]);
+  await loadAsset(app, sceneryAsset);
 
   const scenery = new pc.Entity('Chinese scenery');
   scenery.addComponent('gsplat', { asset: sceneryAsset });
   scenery.setRotation(SCENE_TURN);
   app.root.addChild(scenery);
 
-  const phoenix = new pc.Entity('Phoenix flight rig');
-  const phoenixModel = phoenixAsset.resource.instantiateRenderEntity({ castShadows: false });
-  phoenixModel.setLocalScale(2.4, 2.4, 2.4);
-  phoenix.addChild(phoenixModel);
-  app.root.addChild(phoenix);
-
-  // Fly a straight river corridor through the captured volume. At the far end,
-  // move the single splat back under the Phoenix so the scenery itself loops.
   const bounds = sceneryAsset.resource.aabb;
-  const startZ = bounds.center.z - 2;
-  const endZ = bounds.center.z + bounds.halfExtents.z - 4;
-  const loopLength = endZ - startZ;
-  const corridor = {
-    x: bounds.center.x,
-    y: bounds.center.y,
-    startZ,
-    endZ,
-    length: loopLength
-  };
-  const sceneryOffset = new pc.Vec3();
-  let distanceTravelled = 0;
-  let lap = 0;
-  let speed = 2.1;
-  let lateralOffset = 0;
-  let lateralVelocity = 0;
-  let heading = SCENE_TURN.transformVector(new pc.Vec3(0, 0, 1)).normalize();
-  const keys = new Set();
-  const keyCodes = new Set(['KeyW', 'ArrowUp', 'KeyS', 'ArrowDown', 'KeyA', 'ArrowLeft', 'KeyD', 'ArrowRight']);
+  const localTarget = bounds.center.clone();
+  // Start well inside the splat's measured bounds, looking horizontally through
+  // its center toward the valley. Keep this deliberately independent of input.
+  const localCamera = localTarget.clone().add(new pc.Vec3(0, 0, -8));
+  const localAim = localTarget.clone().add(new pc.Vec3(0, -4, 0));
+  const transform = scenery.getWorldTransform();
+  const pivot = transform.transformPoint(localAim);
+  const initialPosition = transform.transformPoint(localCamera);
+  camera.setPosition(initialPosition);
+  camera.lookAt(pivot);
+  const initialAngles = camera.getEulerAngles();
+  camera.setEulerAngles(initialAngles.x, initialAngles.y, 180);
+  const state = { pivot: pivot.clone(), yaw: initialAngles.y, pitch: initialAngles.x, distance: initialPosition.distance(pivot) };
+  const current = { pivot: pivot.clone(), yaw: state.yaw, pitch: state.pitch, distance: state.distance };
+  const pointers = new Map();
+  let lastPinch = 0;
   canvas.tabIndex = 0;
-  canvas.addEventListener('pointerdown', () => canvas.focus());
-  window.addEventListener('keydown', event => {
-    if (keyCodes.has(event.code)) event.preventDefault();
-    keys.add(event.code);
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
+  canvas.addEventListener('pointerdown', event => {
+    canvas.focus();
+    canvas.setPointerCapture(event.pointerId);
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, button: event.button });
+    lastPinch = 0;
   });
-  window.addEventListener('keyup', event => keys.delete(event.code));
-  window.addEventListener('blur', () => keys.clear());
-
-  const localPlayerPosition = new pc.Vec3(corridor.x, corridor.y, corridor.startZ);
-  const playerPosition = scenery.getWorldTransform().transformPoint(localPlayerPosition);
-  const cameraPosition = playerPosition.clone().sub(heading.clone().mulScalar(4.5)).add(pc.Vec3.UP.clone().mulScalar(1.1));
-  const cameraTarget = playerPosition.clone().add(heading.clone().mulScalar(3.5)).sub(pc.Vec3.UP.clone().mulScalar(0.4));
-  phoenix.setPosition(playerPosition);
-  phoenix.setEulerAngles(0, Math.atan2(heading.x, heading.z) * pc.math.RAD_TO_DEG, 0);
-  camera.setPosition(cameraPosition);
-  camera.lookAt(cameraTarget);
-
-  app.on('update', rawDt => {
-    const dt = rawDt;
-    const forwardInput = Number(keys.has('KeyW') || keys.has('ArrowUp'));
-    const reverseInput = Number(keys.has('KeyS') || keys.has('ArrowDown'));
-    const steerInput = Number(keys.has('KeyD') || keys.has('ArrowRight')) - Number(keys.has('KeyA') || keys.has('ArrowLeft'));
-
-    const targetSpeed = pc.math.clamp(2.1 + forwardInput * 3.4 - reverseInput * 2.1, 0, 6.2);
-    speed += (targetSpeed - speed) * (1 - Math.exp(-3.2 * dt));
-    distanceTravelled += speed * dt;
-
-    const desiredLateralVelocity = steerInput * 4.2 - lateralOffset * 0.7;
-    lateralVelocity += (desiredLateralVelocity - lateralVelocity) * (1 - Math.exp(-4.5 * dt));
-    lateralOffset = pc.math.clamp(lateralOffset + lateralVelocity * dt, -6, 6);
-    if (Math.abs(lateralOffset) >= 6) lateralVelocity = 0;
-
-    const nextLap = Math.floor(distanceTravelled / loopLength);
-    if (nextLap !== lap) {
-      sceneryOffset.copy(SCENE_TURN.transformVector(new pc.Vec3(0, 0, nextLap * loopLength)));
-      scenery.setPosition(sceneryOffset);
-      lap = nextLap;
+  canvas.addEventListener('pointermove', event => {
+    const pointer = pointers.get(event.pointerId);
+    if (!pointer) return;
+    const dx = event.clientX - pointer.x;
+    const dy = event.clientY - pointer.y;
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const pinch = Math.hypot(a.x - b.x, a.y - b.y);
+      if (lastPinch) state.distance *= Math.exp((lastPinch - pinch) * 0.004);
+      lastPinch = pinch;
+    } else if (pointer.button === 2 || event.shiftKey) {
+      const scale = state.distance * 0.0015;
+      state.pivot.add(camera.right.clone().mulScalar(-dx * scale));
+      state.pivot.add(camera.up.clone().mulScalar(dy * scale));
+    } else {
+      state.yaw -= dx * 0.18;
+      state.pitch = pc.math.clamp(state.pitch - dy * 0.18, -89, 89);
     }
-    const localZ = corridor.startZ + (distanceTravelled % loopLength);
-    localPlayerPosition.set(corridor.x + lateralOffset, corridor.y, localZ);
-    const worldTransform = scenery.getWorldTransform();
-    worldTransform.transformPoint(localPlayerPosition, playerPosition);
+  });
+  const releasePointer = event => {
+    pointers.delete(event.pointerId);
+    lastPinch = 0;
+  };
+  canvas.addEventListener('pointerup', releasePointer);
+  canvas.addEventListener('pointercancel', releasePointer);
+  canvas.addEventListener('wheel', event => {
+    event.preventDefault();
+    state.distance = Math.max(0.1, state.distance * Math.exp(event.deltaY * 0.001));
+  }, { passive: false });
 
-    const localFlightDirection = new pc.Vec3(lateralVelocity * Number(speed > 0.01), 0, Math.max(speed, 0.01)).normalize();
-    const desiredHeading = SCENE_TURN.transformVector(localFlightDirection).normalize();
-    heading.lerp(heading, desiredHeading, 1 - Math.exp(-2.8 * dt)).normalize();
-    const yaw = Math.atan2(heading.x, heading.z) * pc.math.RAD_TO_DEG;
-    phoenix.setPosition(playerPosition);
-    phoenix.setEulerAngles(0, yaw, -steerInput * 8);
-
-    const cameraDesired = playerPosition.clone()
-      .sub(heading.clone().mulScalar(4.5))
-      .add(pc.Vec3.UP.clone().mulScalar(1.1));
-    const lookAhead = Math.min(3.5, Math.max(0.75, corridor.endZ - localZ - 0.5));
-    const lookDesired = playerPosition.clone()
-      .add(heading.clone().mulScalar(lookAhead))
-      .sub(pc.Vec3.UP.clone().mulScalar(0.4));
-    cameraPosition.lerp(cameraPosition, cameraDesired, 1 - Math.exp(-3.2 * dt));
-    cameraTarget.lerp(cameraTarget, lookDesired, 1 - Math.exp(-4.2 * dt));
-    camera.setPosition(cameraPosition);
-    camera.lookAt(cameraTarget);
+  app.on('update', dt => {
+    const blend = 1 - Math.exp(-dt * 10);
+    current.pivot.lerp(current.pivot, state.pivot, blend);
+    current.yaw += (state.yaw - current.yaw) * blend;
+    current.pitch += (state.pitch - current.pitch) * blend;
+    current.distance += (state.distance - current.distance) * blend;
+    camera.setEulerAngles(current.pitch, current.yaw, 180);
+    camera.setPosition(current.pivot.clone().sub(camera.forward.clone().mulScalar(current.distance)));
   });
 
   requestAnimationFrame(() => loading.classList.add('ready'));
