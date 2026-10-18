@@ -4,3 +4,4 @@ body { font-family: system-ui, sans-serif; }
 #loading { position: fixed; inset: 0; display: grid; place-items: center; color: #fff; background: #000; font-size: 0.9rem; letter-spacing: 0.04em; transition: opacity 0.7s ease; }
 #loading.ready { opacity: 0; pointer-events: none; }
 #loading.error { padding: 2rem; text-align: center; line-height: 1.6; }
+.camera-debug { position: fixed; z-index: 5; left: 12px; bottom: 12px; margin: 0; padding: 10px 12px; color: #e8eef8; background: rgb(0 0 0 / 78%); border: 1px solid rgb(255 255 255 / 22%); border-radius: 6px; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; pointer-events: none; }

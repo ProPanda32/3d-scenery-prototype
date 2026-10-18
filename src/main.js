@@ -43,16 +43,15 @@ async function start() {
   app.root.addChild(scenery);
 
   const bounds = asset.resource?.aabb;
-  const center = bounds?.center?.clone() ?? new pc.Vec3();
+  const localTarget = new pc.Vec3(0, 1, 8);
+  const center = scenery.getWorldTransform().transformPoint(localTarget);
   const extent = bounds?.halfExtents;
   const radius = Math.max(extent?.x ?? 1, extent?.y ?? 1, extent?.z ?? 1, 0.1);
-  // This capture's visible ground is around Y=1; the bounds extend far below it.
-  center.y = 5;
   const state = {
     pivot: center.clone(),
     yaw: 180,
-    pitch: -10,
-    distance: radius * 0.75,
+    pitch: 0,
+    distance: 8,
     speed: Math.max(radius * 0.8, 0.25)
   };
   const current = {
@@ -64,6 +63,14 @@ async function start() {
   const keys = new Set();
   const pointers = new Map();
   let previousPinch = 0;
+  const debugEnabled = new URLSearchParams(window.location.search).has('debugCamera');
+  let debugReadout;
+  if (debugEnabled) {
+    debugReadout = document.createElement('pre');
+    debugReadout.className = 'camera-debug';
+    debugReadout.innerHTML = '<strong>Camera debug</strong><br>Drag to look · wheel to move · WASD/QE to fly';
+    document.body.append(debugReadout);
+  }
 
   canvas.tabIndex = 0;
   canvas.addEventListener('contextmenu', event => event.preventDefault());
@@ -130,6 +137,12 @@ async function start() {
     current.distance += (state.distance - current.distance) * blend;
     camera.setEulerAngles(current.pitch, current.yaw, 0);
     camera.setPosition(current.pivot.clone().sub(camera.forward.clone().mulScalar(current.distance)));
+    if (debugReadout) {
+      const p = camera.getPosition();
+      const t = current.pivot;
+      const fmt = v => `[${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}]`;
+      debugReadout.textContent = `Camera position: ${fmt(p)}\nCamera target:   ${fmt(t)}\nYaw: ${current.yaw.toFixed(1)}°  Pitch: ${current.pitch.toFixed(1)}°\nDrag to look · wheel to move · WASD/QE to fly`;
+    }
   });
 
   requestAnimationFrame(() => loading.classList.add('ready'));
