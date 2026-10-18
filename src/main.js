@@ -60,7 +60,7 @@ async function start() {
 
   const phoenix = new pc.Entity('Sky Phoenix');
   const phoenixModel = phoenixAsset.resource.instantiateRenderEntity({ castShadows: false });
-  phoenixModel.setLocalScale(2.4, 2.4, 2.4);
+  phoenixModel.setLocalScale(4, 4, 4);
   const phoenixLayer = new pc.Layer({ name: 'Sky Phoenix' });
   app.scene.layers.push(phoenixLayer);
   camera.camera.layers = [...camera.camera.layers, phoenixLayer.id];
