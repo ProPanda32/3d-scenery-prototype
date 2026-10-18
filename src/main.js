@@ -1,6 +1,5 @@
 import * as pc from 'playcanvas';
 import './style.css';
-import { createParticleField } from './particles.js';
 
 const canvas = document.querySelector('#scene');
 const loading = document.querySelector('#loading');
@@ -46,7 +45,6 @@ async function start() {
   scenery.addComponent('gsplat', { asset: sceneryAsset });
   scenery.setRotation(SCENE_TURN);
   app.root.addChild(scenery);
-  createParticleField(canvas, app);
 
   const transform = scenery.getWorldTransform();
   const localPosition = new pc.Vec3();
